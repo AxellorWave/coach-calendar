@@ -1,0 +1,5 @@
+.venv
+.env
+__pycache__/
+*.pyc
+calendar/service_account.json
