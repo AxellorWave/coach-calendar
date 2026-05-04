@@ -32,8 +32,9 @@ def create_event(name: str, start_datetime: str, session_type: str):
             'end': {'dateTime': end, 'timeZone': 'Europe/Moscow'},
         }
 
-        return service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
-
+        event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
+        logger.info(f'Событие "{summary}" на ({start_datetime}) создано: {event.get("htmlLink")}')
+        return event
     except Exception as e:
         logger.exception(f"Ошибка создания события: {e}")
         return None
@@ -53,13 +54,20 @@ def delete_event(name, start_datetime, session_type):
             singleEvents=True,
             orderBy='startTime',
         ).execute().get('items', [])
-
+        if session_type == 'Коуч':
+            session_type = f'Коуч-сессия'
+        elif session_type == 'Психолог (гайд-сессия)':
+            session_type = f'Гайд-сессия'
+        else:
+            logger.exception(f"Ошибка при распозновании типа сессии")
+            return {'error': 'Ошибка при распозновании типа сессии'}
         for event in events:
             summary = event.get('summary', '')
-            if name in summary:
+            if name in summary and session_type in summary:
+                logger.info(f'Событие "{summary}" ({start_datetime}) удалено')
                 service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
                 return True
-
+        logger.warn(f'Событие {session_type} {name} в {target} не найдено')
         return False
 
     except Exception as e:
@@ -69,5 +77,8 @@ def delete_event(name, start_datetime, session_type):
 
 def edit_event(name, old_dt, new_dt, session_type):
     if delete_event(name, old_dt, session_type):
-        return create_event(name, new_dt, session_type)
-    return None
+        if create_event(name, new_dt, session_type):
+            logger.info(f'Запись {session_type} на имя "{name}" успешно перенесена с ({old_dt}) на ({new_dt})')
+            return True
+    logger.exception(f"Ошибка переноса")
+    return False

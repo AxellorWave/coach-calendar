@@ -38,7 +38,7 @@ def parse_message(text: str) -> dict | None:
                 'name': m.group(3).strip(),
                 'session_type': m.group(4).strip()
             }
-
+        logger.warning(f'Неподходящее сообщение')
         return None
 
     except Exception as e:

@@ -11,7 +11,6 @@ def register_handlers(client):
     @client.on(events.NewMessage(incoming=True, chats=CHAT_ID))
     async def handler(event):
         logger.info(f"Сообщение: {event.text}")
-
         result = parse_message(event.text)
         if not result:
             return
