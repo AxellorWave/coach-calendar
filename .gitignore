@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 calendar/service_account.json
 .idea
+session.session

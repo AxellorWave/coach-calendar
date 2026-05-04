@@ -9,3 +9,4 @@ services:
       - .env
     volumes:
       - ./calendar:/app/calendar
+      - ./session.session:/app/session.session
