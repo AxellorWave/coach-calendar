@@ -8,7 +8,8 @@ logger = get_logger(__name__)
 
 SESSION_TYPES = {
     'Коуч': 'Коуч-сессия',
-    'Психолог (гайд-сессия)': 'Гайд-сессия'
+    'Психолог (гайд-сессия)': 'Гайд-сессия',
+    'Психолог': 'Психолог'
 }
 
 
@@ -54,13 +55,12 @@ def delete_event(name, start_datetime, session_type):
             singleEvents=True,
             orderBy='startTime',
         ).execute().get('items', [])
-        if session_type == 'Коуч':
-            session_type = f'Коуч-сессия'
-        elif session_type == 'Психолог (гайд-сессия)':
-            session_type = f'Гайд-сессия'
-        else:
+
+        if session_type not in SESSION_TYPES:
             logger.exception(f"Ошибка при распозновании типа сессии")
             return {'error': 'Ошибка при распозновании типа сессии'}
+
+        session_type = SESSION_TYPES[session_type]
         for event in events:
             summary = event.get('summary', '')
             if name in summary and session_type in summary:
