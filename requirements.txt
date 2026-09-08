@@ -1,4 +1,4 @@
-telethon
+vk_api
 google-api-python-client
 google-auth
 python-dotenv
