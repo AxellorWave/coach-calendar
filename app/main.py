@@ -5,6 +5,7 @@ from app.config import PHONE_NUMBER
 from app.logger import get_logger
 
 logger = get_logger(__name__)
+get_logger("telethon", level=logging.WARNING)
 
 
 async def main():
