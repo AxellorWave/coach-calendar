@@ -2,15 +2,16 @@ import logging
 import sys
 
 
-def get_logger(name: str):
+def get_logger(name: str, level: int = logging.INFO):
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(level)
 
     if logger.handlers:
         return logger
 
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
     )
 
     stdout_handler = logging.StreamHandler(sys.stdout)
