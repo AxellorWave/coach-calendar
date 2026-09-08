@@ -10,7 +10,7 @@ def get_logger(name: str):
         return logger
 
     formatter = logging.Formatter(
-        ' - %(name)s - %(levelname)s - %(message)s'
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
 
     stdout_handler = logging.StreamHandler(sys.stdout)
