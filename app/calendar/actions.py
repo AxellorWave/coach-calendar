@@ -67,7 +67,7 @@ def delete_event(name, start_datetime, session_type):
                 logger.info(f'Событие "{summary}" ({start_datetime}) удалено')
                 service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
                 return True
-        logger.warn(f'Событие {session_type} {name} в {target} не найдено')
+        logger.warning(f'Событие {session_type} {name} в {target} не найдено')
         return False
 
     except Exception as e:
