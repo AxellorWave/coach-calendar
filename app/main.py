@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from app.telegram.client import get_client
 from app.telegram.handlers import register_handlers
 from app.config import PHONE_NUMBER
