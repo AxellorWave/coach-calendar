@@ -3,7 +3,7 @@ version: '3.3'
 services:
   bot:
     build: .
-    container_name: telegram_calendar_bot
+    container_name: vk_calendar_bot
     restart: unless-stopped
     environment:
       - TZ=Europe/Moscow
@@ -11,4 +11,4 @@ services:
       - .env
     volumes:
       - ./calendar:/app/calendar
-      - ./session.session:/app/session.session
+      - ./data:/app/data
