@@ -5,7 +5,7 @@ from app.config import VK_PEER_ID
 from app.vk.state import save_state
 from app.logger import get_logger
 
-logger = get_logger(name)
+logger = get_logger(__name__)
 
 
 def handle_message(text: str):
