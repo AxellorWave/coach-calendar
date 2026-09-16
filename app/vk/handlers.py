@@ -1,4 +1,3 @@
-cat app/vk/handlers.py
 import vk_api
 from app.parser.message_parser import parse_message
 from app.calendar.actions import create_event, delete_event, edit_event
