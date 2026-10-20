@@ -12,3 +12,5 @@ services:
     volumes:
       - ./calendar:/app/calendar
       - ./data:/app/data
+      - ./session.session:/app/session.session
+      - ./logs:/app/logs
