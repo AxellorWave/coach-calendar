@@ -12,25 +12,51 @@ SESSION_TYPES = {
     'Психолог': 'Психолог'
 }
 
+TZ = pytz.timezone('Europe/Moscow')
+SEARCH_FORWARD = timedelta(days=90)
+SEARCH_BACK = timedelta(days=30)
+SLOT_TOLERANCE = timedelta(minutes=5)
+
+
+def _find_at(service, name, label, start):
+    events = service.events().list(
+        calendarId=CALENDAR_ID,
+        timeMin=(start - SLOT_TOLERANCE).isoformat(),
+        timeMax=(start + SLOT_TOLERANCE).isoformat(),
+        singleEvents=True,
+        orderBy='startTime',
+    ).execute().get('items', [])
+    for event in events:
+        summary = event.get('summary', '')
+        if name in summary and label in summary:
+            return event
+    return None
+
+
+def _parse_dt(start_datetime):
+    return TZ.localize(datetime.strptime(start_datetime, '%d-%m-%Y %H:%M'))
+
 
 def create_event(name: str, start_datetime: str, session_type: str):
     try:
-        service = get_calendar_service()
-
         if session_type not in SESSION_TYPES:
             logger.error("Неизвестный тип сессии")
             return None
 
-        summary = f'⭐️ {SESSION_TYPES[session_type]} {name} Просебя'
+        service = get_calendar_service()
+        label = SESSION_TYPES[session_type]
+        start = _parse_dt(start_datetime)
 
-        dt = datetime.strptime(start_datetime, '%d-%m-%Y %H:%M')
-        start = dt.isoformat()
-        end = (dt + timedelta(hours=1)).isoformat()
+        existing = _find_at(service, name, label, start)
+        if existing:
+            logger.info(f'Событие {label} {name} на ({start_datetime}) уже есть, пропускаю')
+            return existing
 
+        summary = f'⭐️ {label} {name} Просебя'
         event = {
             'summary': summary,
-            'start': {'dateTime': start, 'timeZone': 'Europe/Moscow'},
-            'end': {'dateTime': end, 'timeZone': 'Europe/Moscow'},
+            'start': {'dateTime': start.isoformat(), 'timeZone': 'Europe/Moscow'},
+            'end': {'dateTime': (start + timedelta(hours=1)).isoformat(), 'timeZone': 'Europe/Moscow'},
         }
 
         event = service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
@@ -43,41 +69,25 @@ def create_event(name: str, start_datetime: str, session_type: str):
 
 def delete_event(name, start_datetime, session_type):
     try:
-        service = get_calendar_service()
-        timezone = pytz.timezone('Europe/Moscow')
-
-        target = timezone.localize(datetime.strptime(start_datetime, '%d-%m-%Y %H:%M'))
-
-        events = service.events().list(
-            calendarId=CALENDAR_ID,
-            timeMin=(target - timedelta(minutes=5)).isoformat(),
-            timeMax=(target + timedelta(minutes=5)).isoformat(),
-            singleEvents=True,
-            orderBy='startTime',
-        ).execute().get('items', [])
-
         if session_type not in SESSION_TYPES:
-            logger.exception(f"Ошибка при распозновании типа сессии")
+            logger.error("Ошибка при распозновании типа сессии")
             return {'error': 'Ошибка при распозновании типа сессии'}
 
-        session_type = SESSION_TYPES[session_type]
-        for event in events:
-            summary = event.get('summary', '')
-            if name in summary and session_type in summary:
-                logger.info(f'Событие "{summary}" ({start_datetime}) удалено')
-                service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
-                return True
-        logger.warning(f'Событие {session_type} {name} в {target} не найдено')
-        return False
+        service = get_calendar_service()
+        label = SESSION_TYPES[session_type]
+
+        event = _find_at(service, name, label, _parse_dt(start_datetime))
+        if not event:
+            logger.info(f'Событие {label} {name} на ({start_datetime}) не найдено — уже удалено')
+            return True
+
+        service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
+        logger.info(f'Событие "{event.get("summary", "")}" ({start_datetime}) удалено')
+        return True
 
     except Exception as e:
         logger.exception(f"Ошибка удаления: {e}")
         return False
-
-
-SEARCH_FORWARD = timedelta(days=90)
-SEARCH_BACK = timedelta(days=30)
-TZ = pytz.timezone('Europe/Moscow')
 
 
 def _find_events(service, name, label, time_min, time_max):
@@ -134,14 +144,7 @@ def _move_nearest_event(name, new_dt, session_type):
             return bool(create_event(name, new_dt, session_type))
 
         old_start = _event_start(event)
-        service.events().patch(
-            calendarId=CALENDAR_ID,
-            eventId=event['id'],
-            body={
-                'start': {'dateTime': new_start.isoformat(), 'timeZone': 'Europe/Moscow'},
-                'end': {'dateTime': (new_start + timedelta(hours=1)).isoformat(), 'timeZone': 'Europe/Moscow'},
-            },
-        ).execute()
+        _patch_time(service, event, new_start)
         logger.info(f'Запись {label} "{name}" перенесена с ({old_start}) на ({new_dt})')
         return True
 
@@ -150,13 +153,47 @@ def _move_nearest_event(name, new_dt, session_type):
         return False
 
 
+def _patch_time(service, event, new_start):
+    service.events().patch(
+        calendarId=CALENDAR_ID,
+        eventId=event['id'],
+        body={
+            'start': {'dateTime': new_start.isoformat(), 'timeZone': 'Europe/Moscow'},
+            'end': {'dateTime': (new_start + timedelta(hours=1)).isoformat(), 'timeZone': 'Europe/Moscow'},
+        },
+    ).execute()
+
+
 def edit_event(name, old_dt, new_dt, session_type):
     if not old_dt or 'None' in str(old_dt):
         return _move_nearest_event(name, new_dt, session_type)
 
-    if delete_event(name, old_dt, session_type):
-        if create_event(name, new_dt, session_type):
-            logger.info(f'Запись {session_type} на имя "{name}" успешно перенесена с ({old_dt}) на ({new_dt})')
+    try:
+        if session_type not in SESSION_TYPES:
+            logger.error('Неизвестный тип сессии')
+            return False
+
+        service = get_calendar_service()
+        label = SESSION_TYPES[session_type]
+        new_start = _parse_dt(new_dt)
+
+        old_event = _find_at(service, name, label, _parse_dt(old_dt))
+        new_event = _find_at(service, name, label, new_start)
+
+        if new_event:
+            if old_event and old_event['id'] != new_event['id']:
+                service.events().delete(calendarId=CALENDAR_ID, eventId=old_event['id']).execute()
+            logger.info(f'{label} {name} уже стоит на ({new_dt}), перенос не нужен')
             return True
-    logger.error('Ошибка переноса')
-    return False
+
+        if old_event:
+            _patch_time(service, old_event, new_start)
+            logger.info(f'Запись {label} "{name}" перенесена с ({old_dt}) на ({new_dt})')
+            return True
+
+        logger.warning(f'{label} {name}: на ({old_dt}) события нет, создаю на ({new_dt})')
+        return bool(create_event(name, new_dt, session_type))
+
+    except Exception as e:
+        logger.exception(f'Ошибка переноса: {e}')
+        return False
