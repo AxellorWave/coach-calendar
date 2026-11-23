@@ -3,3 +3,5 @@ google-api-python-client
 google-auth
 python-dotenv
 pytz
+httplib2
+google-auth-httplib2

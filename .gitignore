@@ -6,3 +6,4 @@ calendar/service_account.json
 .idea
 session.session
 app/__pycache__
+logs/

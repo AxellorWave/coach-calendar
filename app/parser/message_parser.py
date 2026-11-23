@@ -58,6 +58,10 @@ def parse_message(text: str) -> dict | None:
                 'session_type': m.group(4).strip()
             }
 
+        if text.startswith('Сессия начнётся через'):
+            # Напоминание — действий не требует, в лог ошибок не пишем
+            return None
+
         logger.warning(f'Неподходящее сообщение: {text[:200]!r}')
         return None
 
