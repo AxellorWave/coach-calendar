@@ -2,14 +2,15 @@ from datetime import datetime
 
 import vk_api
 
-from app.calendar.actions import TZ, create_event, delete_event, edit_event
+from app.calendar.actions import TZ, create_event, delete_event, edit_event, quiet_noops
 from app.config import VK_PEER_ID
 from app.logger import get_logger
 from app.parser.message_parser import parse_message
 
 logger = get_logger(__name__)
 
-HISTORY_COUNT = 200
+HISTORY_COUNT = 1000  # сколько последних сообщений сверять
+VK_PAGE_SIZE = 200    # больше VK за один запрос не отдаёт
 
 
 def _slot(name, session_type, date, time):
@@ -66,24 +67,41 @@ def _build_actions(messages):
     return result
 
 
+def _fetch_history(vk, total):
+    # getHistory отдаёт сообщения от новых к старым, поэтому листаем
+    # смещением, пока не наберём total или история не закончится.
+    items = []
+    while len(items) < total:
+        count = min(VK_PAGE_SIZE, total - len(items))
+        page = vk.messages.getHistory(peer_id=VK_PEER_ID, count=count, offset=len(items))['items']
+        items.extend(page)
+        if len(page) < count:
+            break
+    # Если во время листания пришло новое сообщение, страницы сдвигаются
+    # и одно сообщение может попасть дважды — убираем повторы по id.
+    seen = set()
+    return [m for m in items if not (m['id'] in seen or seen.add(m['id']))]
+
+
 def sync_calendar(vk: vk_api.vk_api.VkApiMethod) -> int | None:
-    items = vk.messages.getHistory(peer_id=VK_PEER_ID, count=HISTORY_COUNT)['items']
+    items = _fetch_history(vk, HISTORY_COUNT)
     if not items:
         return None
     messages = list(reversed(items))
 
     actions = _build_actions(messages)
     ok = 0
-    for kind, args in actions:
-        if kind == 'create':
-            name, st, dt = args
-            ok += bool(create_event(name, dt, st))
-        elif kind == 'delete':
-            name, st, dt = args
-            ok += delete_event(name, dt, st) is True
-        elif kind == 'edit':
-            old, (name, st, new_dt) = args
-            ok += bool(edit_event(name, old[2] if old else None, new_dt, st))
+    with quiet_noops():
+        for kind, args in actions:
+            if kind == 'create':
+                name, st, dt = args
+                ok += bool(create_event(name, dt, st))
+            elif kind == 'delete':
+                name, st, dt = args
+                ok += delete_event(name, dt, st) is True
+            elif kind == 'edit':
+                old, (name, st, new_dt) = args
+                ok += bool(edit_event(name, old[2] if old else None, new_dt, st))
 
     logger.info(f'Сверка по {len(messages)} сообщениям: действий {len(actions)}, успешно {ok}')
     return messages[-1]['id']

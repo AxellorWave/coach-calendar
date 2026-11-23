@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta
 import pytz
 from app.logger import get_logger
@@ -17,6 +19,24 @@ TZ = pytz.timezone('Europe/Moscow')
 SEARCH_FORWARD = timedelta(days=90)
 SEARCH_BACK = timedelta(days=30)
 SLOT_TOLERANCE = timedelta(minutes=5)
+
+# В режиме сверки не пишем в лог действия, которые ничего не изменили
+# («уже есть», «уже удалено», «перенос не нужен») — их там сотни.
+_quiet_noops = ContextVar('quiet_noops', default=False)
+
+
+@contextmanager
+def quiet_noops():
+    token = _quiet_noops.set(True)
+    try:
+        yield
+    finally:
+        _quiet_noops.reset(token)
+
+
+def _log_noop(msg):
+    if not _quiet_noops.get():
+        logger.info(msg)
 
 
 def _find_at(service, name, label, start):
@@ -49,7 +69,7 @@ def _create_event(name, start_datetime, label):
 
     existing = _find_at(service, name, label, start)
     if existing:
-        logger.info(f'Событие {label} {name} на ({start_datetime}) уже есть, пропускаю')
+        _log_noop(f'Событие {label} {name} на ({start_datetime}) уже есть, пропускаю')
         return existing
 
     summary = f'⭐️ {label} {name} Просебя'
@@ -81,7 +101,7 @@ def _delete_event(name, start_datetime, label):
 
     event = _find_at(service, name, label, _parse_dt(start_datetime))
     if not event:
-        logger.info(f'Событие {label} {name} на ({start_datetime}) не найдено — уже удалено')
+        _log_noop(f'Событие {label} {name} на ({start_datetime}) не найдено — уже удалено')
         return True
 
     service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
@@ -136,7 +156,7 @@ def _move_nearest(name, new_dt, session_type, label):
     future = _find_events(service, name, label, now, now + SEARCH_FORWARD)
 
     if any(_event_start(e) == new_start for e in future):
-        logger.info(f'{label} {name} уже стоит на {new_dt}, перенос не нужен')
+        _log_noop(f'{label} {name} уже стоит на {new_dt}, перенос не нужен')
         return True
 
     event = future[0] if future else None
@@ -188,7 +208,7 @@ def _edit_event(name, old_dt, new_dt, session_type, label):
     if new_event:
         if old_event and old_event['id'] != new_event['id']:
             service.events().delete(calendarId=CALENDAR_ID, eventId=old_event['id']).execute()
-        logger.info(f'{label} {name} уже стоит на ({new_dt}), перенос не нужен')
+        _log_noop(f'{label} {name} уже стоит на ({new_dt}), перенос не нужен')
         return True
 
     if old_event:
