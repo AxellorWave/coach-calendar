@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 import vk_api
@@ -9,7 +10,7 @@ from app.parser.message_parser import parse_message
 
 logger = get_logger(__name__)
 
-HISTORY_COUNT = 1000  # сколько последних сообщений сверять
+HISTORY_COUNT = int(os.getenv('SYNC_HISTORY_COUNT', '100'))  # сколько последних сообщений сверять
 VK_PAGE_SIZE = 200    # больше VK за один запрос не отдаёт
 
 
