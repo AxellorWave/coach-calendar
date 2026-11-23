@@ -92,18 +92,27 @@ def sync_calendar(vk: vk_api.vk_api.VkApiMethod) -> int | None:
     messages = list(reversed(items))
 
     actions = _build_actions(messages)
-    ok = 0
-    with quiet_noops():
+    changed = unchanged = errors = 0
+    with quiet_noops() as noops:
         for kind, args in actions:
+            before = noops.count
             if kind == 'create':
                 name, st, dt = args
-                ok += bool(create_event(name, dt, st))
+                ok = bool(create_event(name, dt, st))
             elif kind == 'delete':
                 name, st, dt = args
-                ok += delete_event(name, dt, st) is True
-            elif kind == 'edit':
+                ok = delete_event(name, dt, st) is True
+            else:  # edit
                 old, (name, st, new_dt) = args
-                ok += bool(edit_event(name, old[2] if old else None, new_dt, st))
+                ok = bool(edit_event(name, old[2] if old else None, new_dt, st))
 
-    logger.info(f'Сверка по {len(messages)} сообщениям: действий {len(actions)}, успешно {ok}')
+            if not ok:
+                errors += 1
+            elif noops.count > before:
+                unchanged += 1
+            else:
+                changed += 1
+
+    logger.info(f'Сверка по {len(messages)} сообщениям: записей {len(actions)}, '
+                f'изменено {changed}, без изменений {unchanged}, ошибок {errors}')
     return messages[-1]['id']

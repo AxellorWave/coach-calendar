@@ -21,22 +21,32 @@ SEARCH_BACK = timedelta(days=30)
 SLOT_TOLERANCE = timedelta(minutes=5)
 
 # В режиме сверки не пишем в лог действия, которые ничего не изменили
-# («уже есть», «уже удалено», «перенос не нужен») — их там сотни.
-_quiet_noops = ContextVar('quiet_noops', default=False)
+# («уже есть», «уже удалено», «перенос не нужен») — их там сотни, —
+# а только считаем их, чтобы сверка могла отличить «изменено» от «без изменений».
+class NoopCounter:
+    def __init__(self):
+        self.count = 0
+
+
+_quiet_noops = ContextVar('quiet_noops', default=None)
 
 
 @contextmanager
 def quiet_noops():
-    token = _quiet_noops.set(True)
+    counter = NoopCounter()
+    token = _quiet_noops.set(counter)
     try:
-        yield
+        yield counter
     finally:
         _quiet_noops.reset(token)
 
 
 def _log_noop(msg):
-    if not _quiet_noops.get():
+    counter = _quiet_noops.get()
+    if counter is None:
         logger.info(msg)
+    else:
+        counter.count += 1
 
 
 def _find_at(service, name, label, start):
@@ -208,6 +218,8 @@ def _edit_event(name, old_dt, new_dt, session_type, label):
     if new_event:
         if old_event and old_event['id'] != new_event['id']:
             service.events().delete(calendarId=CALENDAR_ID, eventId=old_event['id']).execute()
+            logger.info(f'{label} {name} уже стоит на ({new_dt}), старое событие ({old_dt}) удалено')
+            return True
         _log_noop(f'{label} {name} уже стоит на ({new_dt}), перенос не нужен')
         return True
 
