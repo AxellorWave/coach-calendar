@@ -14,7 +14,7 @@ PATTERN_EDIT_NEW = re.compile(r"Перенос записи\.\s*Новое вр�
 PATTERN_DELETE = re.compile(r"Отмена (?:сессии|записи)\.\s*" + DT + TAIL)
 
 
-def parse_message(text: str) -> dict | None:
+def parse_message(text: str, warn_unknown: bool = True) -> dict | None:
     try:
         text = text.strip()
 
@@ -62,7 +62,8 @@ def parse_message(text: str) -> dict | None:
             # Напоминание — действий не требует, в лог ошибок не пишем
             return None
 
-        logger.warning(f'Неподходящее сообщение: {text[:200]!r}')
+        if warn_unknown:
+            logger.warning(f'Неподходящее сообщение: {text[:200]!r}')
         return None
 
     except Exception as e:

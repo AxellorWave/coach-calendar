@@ -24,7 +24,8 @@ def _build_actions(messages):
     for msg in messages:
         if msg.get('out'):
             continue
-        r = parse_message(msg.get('text', ''))
+        # Историю чата (ссылки Телемоста и т.п.) при сверке в лог не пишем
+        r = parse_message(msg.get('text', ''), warn_unknown=False)
         if not r:
             continue
         name, st = r['name'], r['session_type']
